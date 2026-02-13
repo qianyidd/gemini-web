@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Pro 终极终端 (v6 - 视觉版)</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    
+    <style>
+        :root {
+            --bg-color: #121212;
+            --sidebar-bg: #1a1a1a;
+            --item-hover: #2a2a2a;
+            --item-active: #333;
+            --input-bg: #252525;
+            --border-color: #333;
+            --primary-color: #4da6ff;
+            --text-color: #e0e0e0;
+            --user-msg-bg: #1e4976;
+            --danger-color: #ff5555;
+            --token-text: #888;
+        }
+
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* === 侧边栏 === */
+        .sidebar {
+            width: 280px;
+            background-color: var(--sidebar-bg);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            overflow-y: auto;
+            transition: width 0.3s ease, padding 0.3s ease, opacity 0.2s ease;
+            white-space: nowrap;
+            overflow-x: hidden;
+        }
+
+        .sidebar.collapsed { width: 0; padding: 0; border-right: none; opacity: 0; }
+        .config-section { padding: 20px; border-bottom: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 12px; transition: opacity 0.3s; }
+        .sidebar.collapsed .config-section { opacity: 0; }
+
+        .form-group label { font-size: 11px; color: #aaa; display: flex; justify-content: space-between; margin-bottom: 4px; }
+        
+        input[type="text"], input[type="password"], input[type="number"], textarea.config-input {
+            background: var(--input-bg);
+            border: 1px solid var(--border-color);
+            color: white;
+            padding: 8px;
+            border-radius: 4px;
+            outline: none;
+            width: 100%;
+            box-sizing: border-box;
+            font-size: 13px;
+            font-family: inherit;
+        }
+        input:focus, textarea.config-input:focus { border-color: var(--primary-color); }
+        textarea.config-input { resize: vertical; min-height: 60px; line-height: 1.4; }
+        input[type="range"] { width: 100%; accent-color: var(--primary-color); height: 4px; background: #333; border-radius: 2px; outline: none; }
+
+        details { background: #222; border-radius: 4px; padding: 5px; border: 1px solid #333; margin-bottom: 5px; }
+        summary { cursor: pointer; font-size: 12px; font-weight: bold; color: #ddd; padding: 5px; user-select: none; display: flex; align-items: center; gap: 5px; }
+        summary:hover { color: white; }
+        .params-container { padding: 10px 5px; display: flex; flex-direction: column; gap: 12px; }
+
+        .session-list-container { flex: 1; overflow-y: auto; padding: 10px; }
+        .new-chat-btn { background: var(--primary-color); color: white; border: none; padding: 10px; width: 100%; border-radius: 6px; cursor: pointer; font-weight: 600; margin-bottom: 10px; transition: opacity 0.2s; }
+        .new-chat-btn:hover { opacity: 0.9; }
+
+        .session-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-radius: 6px; cursor: pointer; margin-bottom: 4px; font-size: 13px; color: #ccc; transition: background 0.2s; }
+        .session-item:hover { background: var(--item-hover); }
+        .session-item.active { background: var(--item-active); color: white; border-left: 3px solid var(--primary-color); }
+        .session-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+        .delete-btn { color: #666; cursor: pointer; opacity: 0; transition: opacity 0.2s; padding: 0 5px;}
+        .session-item:hover .delete-btn { opacity: 1; }
+        .delete-btn:hover { color: var(--danger-color); }
+
+        .sidebar-tools { padding: 15px; border-top: 1px solid var(--border-color); display: flex; gap: 10px; }
+        .tool-btn { flex: 1; background: #2d2d2d; border: 1px solid #444; color: #ccc; padding: 8px; border-radius: 4px; cursor: pointer; font-size: 12px; text-align: center; }
+        .tool-btn:hover { background: #3d3d3d; color: white; }
+
+        /* === 主界面 === */
+        .main-chat { flex: 1; display: flex; flex-direction: column; position: relative; min-width: 0; }
+        
+        .header-bar { padding: 10px 20px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: flex-start; align-items: center; background: var(--sidebar-bg); font-size: 13px; color: #888; height: 40px; }
+        
+        #toggle-sidebar-btn { background: transparent; border: none; color: #aaa; cursor: pointer; font-size: 18px; padding: 5px 10px; margin-right: 15px; border-radius: 4px; transition: background 0.2s; }
+        #toggle-sidebar-btn:hover { background: #333; color: white; }
+
+        #chat-box { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
+
+        .message { display: flex; flex-direction: column; max-width: 800px; margin: 0 auto; width: 100%; position: relative; group: 1; }
+        .message.user { align-items: flex-end; }
+        .message.ai { align-items: flex-start; }
+
+        .msg-actions {
+            position: absolute; top: -20px; display: flex; gap: 5px; background: #2a2a2a; padding: 2px 6px; border-radius: 4px; opacity: 0; transition: opacity 0.2s; pointer-events: none;
+        }
+        .message:hover .msg-actions { opacity: 1; pointer-events: auto; }
+        .message.user .msg-actions { right: 0; }
+        .message.ai .msg-actions { left: 0; }
+
+        .action-btn { background: none; border: none; color: #bbb; cursor: pointer; font-size: 12px; padding: 2px 4px; }
+        .action-btn:hover { color: white; background: #444; border-radius: 2px; }
+        .action-btn.delete:hover { color: #ff5555; }
+
+        .bubble { padding: 12px 16px; border-radius: 8px; line-height: 1.6; max-width: 90%; word-wrap: break-word; position: relative; }
+        .message.user .bubble { background-color: var(--user-msg-bg); border-top-right-radius: 2px; }
+        .message.ai .bubble { background-color: transparent; padding: 0; width: 100%; }
+
+        .token-info { font-size: 11px; color: var(--token-text); margin-top: 5px; opacity: 0.7; font-family: monospace; text-align: left; padding-left: 2px; display: none; }
+        
+        .cursor::after { content: '▋'; display: inline-block; vertical-align: text-bottom; animation: blink 1s step-end infinite; color: var(--primary-color); margin-left: 2px; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+        /* 图片样式 */
+        .bubble img { max-width: 100%; border-radius: 6px; margin-top: 5px; display: block; max-height: 400px; object-fit: contain; }
+        .bubble pre { background: #161616 !important; padding: 15px; border-radius: 6px; overflow-x: auto; border: 1px solid #333; margin: 10px 0; }
+        .bubble code { font-family: 'Consolas', monospace; font-size: 14px; }
+        .bubble p { margin: 0 0 10px 0; }
+        .bubble p:last-child { margin-bottom: 0; }
+
+        /* 输入区 */
+        .input-area { padding: 20px; background: var(--sidebar-bg); border-top: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 10px; }
+        
+        /* 预览区 */
+        #preview-area { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 5px; min-height: 0; }
+        .preview-item { position: relative; width: 60px; height: 60px; border-radius: 6px; border: 1px solid #444; background-size: cover; background-position: center; flex-shrink: 0; }
+        .preview-remove { position: absolute; top: -5px; right: -5px; background: red; color: white; border-radius: 50%; width: 16px; height: 16px; font-size: 12px; display: flex; align-items: center; justify-content: center; cursor: pointer; border: 1px solid white; }
+
+        .input-wrapper { max-width: 800px; margin: 0 auto; display: flex; gap: 10px; width: 100%; align-items: flex-end; }
+        
+        /* 上传按钮 */
+        .icon-btn { background: transparent; border: none; color: #aaa; cursor: pointer; padding: 8px; border-radius: 50%; transition: background 0.2s, color 0.2s; display: flex; align-items: center; justify-content: center; }
+        .icon-btn:hover { background: #333; color: white; }
+
+        textarea#user-input { flex: 1; background: var(--input-bg); border: 1px solid var(--border-color); color: white; padding: 12px; border-radius: 8px; resize: none; height: 24px; max-height: 200px; line-height: 24px; outline: none; font-family: inherit; }
+        textarea#user-input:focus { border-color: var(--primary-color); }
+        #send-btn { background: var(--primary-color); color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; white-space: nowrap; height: 48px; }
+        #send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        #stop-btn { background: #ff4444; display: none; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; height: 48px; }
+
+        /* 编辑模式 */
+        .edit-textarea { width: 100%; background: #222; color: #eee; border: 1px solid #444; border-radius: 4px; padding: 8px; font-family: inherit; font-size: inherit; outline: none; resize: vertical; min-height: 60px; }
+        .edit-controls { display: flex; gap: 8px; margin-top: 5px; justify-content: flex-end; }
+        .edit-btn { padding: 4px 10px; border-radius: 4px; border: none; cursor: pointer; font-size: 12px; }
+        .btn-save { background: var(--primary-color); color: white; }
+        .btn-cancel { background: #444; color: #ccc; }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar" id="sidebar">
+        <div class="config-section">
+            <h2 style="margin: 0 0 10px 0; font-size: 18px; color: #fff;">Gemini Hub</h2>
+            <div class="form-group"> <label>API Host</label> <input type="text" id="api-host" placeholder="https://..." onchange="saveConfig()"> </div>
+            <div class="form-group"> <label>API Key</label> <input type="password" id="api-key" placeholder="API Key" onchange="saveConfig()"> </div>
+            <div class="form-group"> <label>Model Name</label> <input type="text" id="model-name" value="gemini-1.5-flash" onchange="saveConfig()"> </div>
+            
+            <details>
+                <summary>🎭 系统指令 (System Instruction)</summary>
+                <div class="params-container">
+                    <textarea class="config-input" id="sys-instruction" placeholder="例如：你是一个严厉的 Python 面试官..." onchange="saveConfig()"></textarea>
+                </div>
+            </details>
+            <details>
+                <summary>⚙️ 模型参数 (Params)</summary>
+                <div class="params-container">
+                    <div class="form-group"> <label>Temperature: <span id="val-temp">1.0</span></label> <input type="range" id="cfg-temp" min="0" max="2" step="0.1" value="1.0" oninput="updateParamDisplay('temp')"> </div>
+                    <div class="form-group"> <label>Top P: <span id="val-topp">0.95</span></label> <input type="range" id="cfg-topp" min="0" max="1" step="0.05" value="0.95" oninput="updateParamDisplay('topp')"> </div>
+                    <div class="form-group"> <label>Top K:</label> <input type="number" id="cfg-topk" value="40" onchange="saveConfig()"> </div>
+                    <div class="form-group"> <label>Max Tokens:</label> <input type="number" id="cfg-maxtokens" value="8192" onchange="saveConfig()"> </div>
+                </div>
+            </details>
+        </div>
+        <div class="session-list-container">
+            <button class="new-chat-btn" onclick="createNewSession()">+ 新建对话</button>
+            <div id="session-list"></div>
+        </div>
+        <div class="sidebar-tools">
+            <button class="tool-btn" onclick="exportChats()">📥 导出</button>
+            <button class="tool-btn" onclick="document.getElementById('import-file').click()">📤 恢复</button>
+            <input type="file" id="import-file" style="display: none" accept=".json" onchange="importChats(this)">
+        </div>
+    </div>
+
+    <div class="main-chat">
+        <div class="header-bar">
+            <button id="toggle-sidebar-btn" onclick="toggleSidebar()" title="切换侧边栏">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+            </button>
+            <span id="current-chat-title">新对话</span>
+            <span style="flex:1"></span>
+            <span id="status-text">就绪</span>
+        </div>
+        <div id="chat-box"></div>
+        
+        <div class="input-area">
+            <div class="input-wrapper" style="max-width: 800px; margin: 0 auto; width: 100%; flex-direction: column; align-items: stretch; gap: 5px;">
+                <!-- 图片预览区 -->
+                <div id="preview-area"></div>
+                
+                <div style="display: flex; gap: 10px; align-items: flex-end;">
+                    <!-- 上传按钮 -->
+                    <input type="file" id="img-upload" accept="image/*" multiple style="display: none;" onchange="handleImageSelect(this)">
+                    <button class="icon-btn" onclick="document.getElementById('img-upload').click()" title="上传图片">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+                    </button>
+
+                    <textarea id="user-input" placeholder="输入消息... (支持 Ctrl+V 粘贴图片)" rows="1"></textarea>
+                    <button id="send-btn">发送</button>
+                    <button id="stop-btn" onclick="stopGeneration()">停止</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const STATE = {
+            config: { 
+                host: 'https://generativelanguage.googleapis.com', key: '', model: 'gemini-1.5-flash', systemInstruction: '',
+                generation: { temperature: 1.0, topP: 0.95, topK: 40, maxOutputTokens: 8192 }
+            },
+            sessions: [],
+            currentSessionId: null,
+            abortController: null,
+            sidebarCollapsed: false,
+            editingIndex: -1,
+            currentImages: [] // 存储当前待发送的图片 (Base64)
+        };
+
+        const dom = {
+            sidebar: document.getElementById('sidebar'),
+            host: document.getElementById('api-host'), key: document.getElementById('api-key'), model: document.getElementById('model-name'), sysInstruction: document.getElementById('sys-instruction'),
+            temp: document.getElementById('cfg-temp'), topp: document.getElementById('cfg-topp'), topk: document.getElementById('cfg-topk'), maxTokens: document.getElementById('cfg-maxtokens'),
+            valTemp: document.getElementById('val-temp'), valTopp: document.getElementById('val-topp'),
+            sessionList: document.getElementById('session-list'), chatBox: document.getElementById('chat-box'),
+            userInput: document.getElementById('user-input'), sendBtn: document.getElementById('send-btn'), stopBtn: document.getElementById('stop-btn'), status: document.getElementById('status-text'), title: document.getElementById('current-chat-title'),
+            previewArea: document.getElementById('preview-area'), imgUpload: document.getElementById('img-upload')
+        };
+
+        marked.setOptions({ breaks: true, highlight: (code, lang) => hljs.getLanguage(lang) ? hljs.highlight(code, { language: lang }).value : hljs.highlightAuto(code).value });
+
+        function toggleSidebar() { STATE.sidebarCollapsed = !STATE.sidebarCollapsed; updateSidebarState(); localStorage.setItem('gemini_sidebar_collapsed', STATE.sidebarCollapsed); }
+        function updateSidebarState() { if (STATE.sidebarCollapsed) dom.sidebar.classList.add('collapsed'); else dom.sidebar.classList.remove('collapsed'); }
+
+        function init() {
+            const savedConfig = localStorage.getItem('gemini_config');
+            if (savedConfig) { STATE.config = { ...STATE.config, ...JSON.parse(savedConfig) }; if(!STATE.config.generation) STATE.config.generation = {temperature:1.0,topP:0.95,topK:40,maxOutputTokens:8192}; }
+            const savedSidebar = localStorage.getItem('gemini_sidebar_collapsed');
+            if (savedSidebar !== null) { STATE.sidebarCollapsed = savedSidebar === 'true'; updateSidebarState(); }
+
+            dom.host.value = STATE.config.host; dom.key.value = STATE.config.key || ''; dom.model.value = STATE.config.model; dom.sysInstruction.value = STATE.config.systemInstruction || '';
+            dom.temp.value = STATE.config.generation.temperature; dom.topp.value = STATE.config.generation.topP; dom.topk.value = STATE.config.generation.topK; dom.maxTokens.value = STATE.config.generation.maxOutputTokens;
+            updateParamDisplay('temp'); updateParamDisplay('topp');
+
+            const savedSessions = localStorage.getItem('gemini_sessions');
+            STATE.sessions = savedSessions ? JSON.parse(savedSessions) : [];
+            if (STATE.sessions.length === 0) createNewSession(); else loadSession(STATE.sessions[0].id);
+        }
+
+        function updateParamDisplay(type) { if (type === 'temp') dom.valTemp.textContent = dom.temp.value; else if (type === 'topp') dom.valTopp.textContent = dom.topp.value; saveConfig(); }
+        function saveConfig() { 
+            STATE.config.host = dom.host.value; STATE.config.key = dom.key.value; STATE.config.model = dom.model.value; STATE.config.systemInstruction = dom.sysInstruction.value;
+            STATE.config.generation = { temperature: parseFloat(dom.temp.value), topP: parseFloat(dom.topp.value), topK: parseInt(dom.topk.value), maxOutputTokens: parseInt(dom.maxTokens.value) };
+            localStorage.setItem('gemini_config', JSON.stringify(STATE.config));
+        }
+        function saveSessions() { localStorage.setItem('gemini_sessions', JSON.stringify(STATE.sessions)); }
+        
+        function exportChats() { const b = new Blob([JSON.stringify(STATE.sessions,null,2)],{type:"application/json"}); const u=URL.createObjectURL(b); const a=document.createElement('a'); a.href=u; a.download=`gemini_backup_${new Date().toISOString().slice(0,10)}.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a); }
+        function importChats(inp) { const f=inp.files[0]; if(!f)return; const r=new FileReader(); r.onload=e=>{ try{ const d=JSON.parse(e.target.result); if(Array.isArray(d)) { d.forEach(s=>{ const i=STATE.sessions.findIndex(x=>x.id===s.id); if(i!==-1)STATE.sessions[i]=s; else STATE.sessions.unshift(s); }); saveSessions(); renderSessionList(); loadSession(STATE.sessions[0].id); alert('导入成功'); } }catch(err){alert('格式错误');} inp.value=''; }; r.readAsText(f); }
+        
+        function createNewSession() { STATE.sessions.unshift({ id: Date.now().toString(), title: '新对话', history: [] }); saveSessions(); loadSession(STATE.sessions[0].id); renderSessionList(); }
+        function deleteSession(e, id) { e.stopPropagation(); if(!confirm('确定删除整个会话?')) return; STATE.sessions = STATE.sessions.filter(s => s.id !== id); saveSessions(); if (STATE.sessions.length === 0) createNewSession(); else if (id === STATE.currentSessionId) loadSession(STATE.sessions[0].id); renderSessionList(); }
+        function loadSession(id) { STATE.currentSessionId = id; const session = STATE.sessions.find(s => s.id === id); if (!session) return; dom.title.textContent = session.title; renderChat(); renderSessionList(); }
+        function renderSessionList() { dom.sessionList.innerHTML = ''; STATE.sessions.forEach(session => { const div = document.createElement('div'); div.className = `session-item ${session.id === STATE.currentSessionId ? 'active' : ''}`; div.onclick = () => loadSession(session.id); div.innerHTML = `<span class="session-title">${session.title}</span><span class="delete-btn" onclick="deleteSession(event, '${session.id}')">&times;</span>`; dom.sessionList.appendChild(div); }); }
+
+        // === 图片处理逻辑 ===
+        function handleImageSelect(input) {
+            const files = Array.from(input.files);
+            processFiles(files);
+            input.value = ''; // 重置 input 以允许重复上传同一文件
+        }
+
+        // 粘贴事件监听
+        dom.userInput.addEventListener('paste', (e) => {
+            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+            const files = [];
+            for (let item of items) {
+                if (item.kind === 'file' && item.type.startsWith('image/')) {
+                    files.push(item.getAsFile());
+                }
+            }
+            if (files.length > 0) processFiles(files);
+        });
+
+        async function processFiles(files) {
+            for (const file of files) {
+                if (!file.type.startsWith('image/')) continue;
+                const base64 = await fileToBase64(file);
+                STATE.currentImages.push({
+                    mimeType: file.type,
+                    data: base64 // 完整 base64 字符串
+                });
+            }
+            renderPreview();
+        }
+
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function renderPreview() {
+            dom.previewArea.innerHTML = '';
+            STATE.currentImages.forEach((img, index) => {
+                const div = document.createElement('div');
+                div.className = 'preview-item';
+                div.style.backgroundImage = `url(${img.data})`;
+                div.innerHTML = `<div class="preview-remove" onclick="removeImage(${index})">&times;</div>`;
+                dom.previewArea.appendChild(div);
+            });
+        }
+
+        function removeImage(index) {
+            STATE.currentImages.splice(index, 1);
+            renderPreview();
+        }
+
+        // === 消息渲染 ===
+        function renderChat() {
+            dom.chatBox.innerHTML = '';
+            const session = STATE.sessions.find(s => s.id === STATE.currentSessionId);
+            if (!session) return;
+
+            if (session.history.length === 0) {
+                appendMessageToUI('ai', [{text: '你好！我是 Gemini，你可以发送文字或上传图片。'}], false, null, -1);
+            } else {
+                session.history.forEach((msg, index) => {
+                    const role = msg.role === 'model' ? 'ai' : 'user';
+                    if (index === STATE.editingIndex) {
+                        // 编辑模式下暂时只取文本部分，忽略图片编辑的复杂性
+                        const textPart = msg.parts.find(p => p.text)?.text || "";
+                        renderEditBox(role, textPart, index);
+                    } else {
+                        appendMessageToUI(role, msg.parts, false, msg.usageMetadata || null, index);
+                    }
+                });
+            }
+            dom.chatBox.scrollTop = dom.chatBox.scrollHeight;
+        }
+
+        // 修改：parts 参数现在接收数组
+        function appendMessageToUI(role, parts, isStreaming = false, usage = null, index = -1) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message ${role}`;
+            
+            if (!isStreaming && index !== -1) {
+                const actions = document.createElement('div');
+                actions.className = 'msg-actions';
+                actions.innerHTML = `<button class="action-btn" onclick="startEdit(${index})" title="编辑文本">✎</button><button class="action-btn delete" onclick="deleteMessage(${index})" title="删除">🗑️</button>`;
+                msgDiv.appendChild(actions);
+            }
+
+            const bubble = document.createElement('div');
+            bubble.className = 'bubble';
+            if (isStreaming) bubble.classList.add('cursor');
+
+            // 混合渲染内容
+            let contentHtml = "";
+            let textContent = "";
+            
+            // 确保 parts 是数组
+            const partsArray = Array.isArray(parts) ? parts : [parts];
+
+            partsArray.forEach(part => {
+                if (part.text) {
+                    textContent += part.text; // 累积文本，最后渲染 Markdown
+                } else if (part.inlineData) {
+                    // 渲染图片
+                    const src = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+                    contentHtml += `<img src="${src}" alt="uploaded image">`;
+                }
+            });
+
+            if (textContent) {
+                if (role === 'ai') contentHtml = marked.parse(textContent) + contentHtml;
+                else contentHtml = `<div>${textContent.replace(/\n/g, '<br>')}</div>` + contentHtml;
+            }
+
+            bubble.innerHTML = contentHtml;
+            if (role === 'ai') bubble.querySelectorAll('pre code').forEach(block => hljs.highlightElement(block));
+            
+            msgDiv.appendChild(bubble);
+
+            if (role === 'ai' && (usage || index !== -1)) {
+                const tokenDiv = document.createElement('div');
+                tokenDiv.className = 'token-info';
+                if (usage) {
+                    tokenDiv.textContent = `P: ${usage.promptTokenCount} | O: ${usage.candidatesTokenCount} | T: ${usage.totalTokenCount}`;
+                    tokenDiv.style.display = 'block';
+                }
+                msgDiv.appendChild(tokenDiv);
+                bubble.tokenElement = tokenDiv;
+            }
+
+            dom.chatBox.appendChild(msgDiv);
+            if(isStreaming) dom.chatBox.scrollTop = dom.chatBox.scrollHeight;
+            return bubble;
+        }
+
+        // === 编辑与删除 ===
+        function deleteMessage(index) { if (!confirm('确定删除?')) return; STATE.sessions.find(s => s.id === STATE.currentSessionId).history.splice(index, 1); saveSessions(); renderChat(); }
+        function startEdit(index) { STATE.editingIndex = index; renderChat(); }
+        function cancelEdit() { STATE.editingIndex = -1; renderChat(); }
+        function renderEditBox(role, text, index) {
+            const msgDiv = document.createElement('div'); msgDiv.className = `message ${role}`; msgDiv.style.width = '100%'; 
+            const editWrapper = document.createElement('div'); editWrapper.style.width = '100%'; editWrapper.style.maxWidth = '800px';
+            const textarea = document.createElement('textarea'); textarea.className = 'edit-textarea'; textarea.value = text;
+            const controls = document.createElement('div'); controls.className = 'edit-controls';
+            controls.innerHTML = `<button class="edit-btn btn-cancel" onclick="cancelEdit()">取消</button><button class="edit-btn btn-save" onclick="saveEdit(${index}, this)">保存修改</button>`;
+            editWrapper.appendChild(textarea); editWrapper.appendChild(controls); msgDiv.appendChild(editWrapper); dom.chatBox.appendChild(msgDiv);
+        }
+        function saveEdit(index, btn) {
+            const newText = btn.parentElement.parentElement.querySelector('textarea').value.trim();
+            if (!newText) return alert('内容不能为空');
+            const session = STATE.sessions.find(s => s.id === STATE.currentSessionId);
+            const msg = session.history[index];
+            // 查找现有的 text part 并修改，如果不存在则添加。保留图片 part 不变。
+            const textPart = msg.parts.find(p => p.text);
+            if (textPart) textPart.text = newText;
+            else msg.parts.unshift({ text: newText });
+            
+            STATE.editingIndex = -1; saveSessions(); renderChat();
+        }
+
+        // === 发送 ===
+        async function sendMessage() {
+            const text = dom.userInput.value.trim();
+            // 如果既没有文本也没有图片，则不发送
+            if (!text && STATE.currentImages.length === 0) return;
+            if (!STATE.config.key) { alert('请先输入 API Key'); return; }
+
+            const currentSession = STATE.sessions.find(s => s.id === STATE.currentSessionId);
+            
+            // 构造用户消息 parts
+            const userParts = [];
+            if (text) userParts.push({ text: text });
+            
+            STATE.currentImages.forEach(img => {
+                // API 需要去掉 data:image/png;base64, 前缀，但我们为了显示保留了完整串
+                // 这里需要分割
+                const base64Data = img.data.split(',')[1];
+                userParts.push({
+                    inlineData: {
+                        mimeType: img.mimeType,
+                        data: base64Data
+                    }
+                });
+            });
+
+            // 保存到历史并清空输入
+            currentSession.history.push({ role: "user", parts: userParts });
+            if (currentSession.history.length === 1) {
+                currentSession.title = text ? text.slice(0, 20) : '[图片消息]';
+                renderSessionList();
+            }
+            saveSessions();
+            
+            dom.userInput.value = '';
+            dom.userInput.style.height = '24px';
+            STATE.currentImages = []; // 清空待发送图片
+            renderPreview(); // 清空预览区
+            renderChat();
+            
+            setLoadingState(true);
+
+            let aiText = "";
+            let usageMetadata = null;
+            const aiBubble = appendMessageToUI('ai', [{text: ""}], true);
+            
+            STATE.abortController = new AbortController();
+
+            try {
+                const host = STATE.config.host.replace(/\/$/, '');
+                const url = `${host}/v1beta/models/${STATE.config.model}:streamGenerateContent?key=${STATE.config.key}&alt=sse`;
+
+                const apiHistory = currentSession.history.map(msg => ({ role: msg.role, parts: msg.parts }));
+                const requestBody = { contents: apiHistory, generationConfig: STATE.config.generation };
+                if (STATE.config.systemInstruction && STATE.config.systemInstruction.trim()) {
+                    requestBody.systemInstruction = { parts: [{ text: STATE.config.systemInstruction.trim() }] };
+                }
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody),
+                    signal: STATE.abortController.signal
+                });
+
+                if (!response.ok) throw new Error(`API Error: ${response.status} - ${await response.text()}`);
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    const lines = decoder.decode(value, { stream: true }).split('\n');
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const jsonStr = line.slice(6);
+                            if (jsonStr.trim() === '[DONE]') continue;
+                            try {
+                                const data = JSON.parse(jsonStr);
+                                const chunkText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                                if (chunkText) {
+                                    aiText += chunkText;
+                                    // 实时渲染 Markdown
+                                    const rendered = marked.parse(aiText);
+                                    aiBubble.innerHTML = rendered; 
+                                    aiBubble.querySelectorAll('pre code').forEach(block => hljs.highlightElement(block));
+                                    dom.chatBox.scrollTop = dom.chatBox.scrollHeight;
+                                }
+                                if (data.usageMetadata) usageMetadata = data.usageMetadata;
+                            } catch (e) {}
+                        }
+                    }
+                }
+
+                aiBubble.classList.remove('cursor');
+                const msgData = { role: "model", parts: [{ text: aiText }] };
+                if (usageMetadata) msgData.usageMetadata = usageMetadata;
+                currentSession.history.push(msgData);
+                saveSessions();
+                renderChat();
+                dom.status.textContent = '就绪';
+
+            } catch (err) {
+                if (err.name === 'AbortError') {
+                    aiBubble.classList.remove('cursor');
+                    aiText += "\n\n[已停止生成]";
+                    currentSession.history.push({ role: "model", parts: [{ text: aiText }] });
+                    saveSessions();
+                    renderChat();
+                } else {
+                    aiBubble.innerHTML += `<br><span style="color:red">❌ 错误: ${err.message}</span>`;
+                }
+            } finally {
+                setLoadingState(false);
+            }
+        }
+
+        function stopGeneration() { if (STATE.abortController) { STATE.abortController.abort(); STATE.abortController = null; } }
+        function setLoadingState(isLoading) {
+            dom.sendBtn.style.display = isLoading ? 'none' : 'block';
+            dom.stopBtn.style.display = isLoading ? 'block' : 'none';
+            dom.status.textContent = isLoading ? 'Gemini 正在输入...' : '就绪';
+            dom.userInput.disabled = isLoading;
+            if(!isLoading) dom.userInput.focus();
+        }
+
+        dom.sendBtn.addEventListener('click', sendMessage);
+        dom.userInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
+        dom.userInput.addEventListener('input', function() { this.style.height = 'auto'; this.style.height = (this.scrollHeight) + 'px'; if(this.value === '') this.style.height = '24px'; });
+
+        init();
+    </script>
+</body>
+</html>
